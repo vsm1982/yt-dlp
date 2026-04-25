@@ -3,6 +3,10 @@ import yt_dlp
 import os
 import tempfile
 import glob
+import imageio_ffmpeg
+
+# ── ffmpeg via imageio ────────────────────────────────────────────────────────
+FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -233,6 +237,7 @@ if st.session_state.video_info:
                 "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
                 "outtmpl": os.path.join(tmpdir, "%(title)s.%(ext)s"),
                 "merge_output_format": "mp4",
+                "ffmpeg_location": FFMPEG_PATH,
                 "progress_hooks": [progress_hook],
                 "quiet": True,
                 "no_warnings": True,
