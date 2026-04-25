@@ -1,120 +1,279 @@
 import streamlit as st
+import yt_dlp
+import os
+import tempfile
+import glob
 
-st.set_page_config(page_title="YouTube Video Downloader", page_icon="🎵", layout="wide")
+# ── Page config ──────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="YT Downloader",
+    page_icon="▶",
+    layout="centered",
+)
 
-# Home page content
+# ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
-    <div style="text-align: center; padding: 2rem 0;">
-        <h1 style="color: #FF6B6B; font-size: 3rem; margin-bottom: 1rem;">🎵 YouTube Video Downloader</h1>
-        <h2 style="color: #4ECDC4; font-size: 1.5rem; margin-bottom: 2rem;">Welcome!</h2>
-        <p style="font-size: 1.2rem; color: #666; max-width: 600px; margin: 0 auto;">
-            With this application, you can easily download YouTube videos and playlists. 
-            Use the left menu to navigate to the desired page.
-        </p>
-    </div>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Space Mono', monospace;
+}
+
+.stApp {
+    background-color: #0d0d0d;
+    color: #f0f0f0;
+}
+
+h1 {
+    font-family: 'Syne', sans-serif !important;
+    font-size: 2.8rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -1px;
+    color: #ff3c3c !important;
+    line-height: 1.1 !important;
+    margin-bottom: 0 !important;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 0.78rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 2.5rem;
+}
+
+/* Input field */
+.stTextInput > div > div > input {
+    background-color: #1a1a1a !important;
+    border: 1px solid #333 !important;
+    border-radius: 2px !important;
+    color: #f0f0f0 !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 0.9rem !important;
+    padding: 0.75rem 1rem !important;
+    caret-color: #ff3c3c;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #ff3c3c !important;
+    box-shadow: 0 0 0 2px rgba(255,60,60,0.15) !important;
+}
+.stTextInput label {
+    color: #888 !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* Buttons */
+.stButton > button {
+    background-color: #ff3c3c !important;
+    color: #0d0d0d !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: none !important;
+    border-radius: 2px !important;
+    padding: 0.6rem 1.8rem !important;
+    width: 100%;
+    transition: background 0.2s, transform 0.1s;
+}
+.stButton > button:hover {
+    background-color: #ff6060 !important;
+    transform: translateY(-1px);
+}
+.stButton > button:active {
+    transform: translateY(0px);
+}
+
+/* Download button */
+.stDownloadButton > button {
+    background-color: #0d0d0d !important;
+    color: #ff3c3c !important;
+    font-family: 'Space Mono', monospace !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 1px;
+    border: 1px solid #ff3c3c !important;
+    border-radius: 2px !important;
+    padding: 0.6rem 1.8rem !important;
+    width: 100%;
+    transition: background 0.2s;
+}
+.stDownloadButton > button:hover {
+    background-color: rgba(255,60,60,0.1) !important;
+}
+
+/* Progress / status */
+.stProgress > div > div > div {
+    background-color: #ff3c3c !important;
+}
+
+/* Alerts */
+.stAlert {
+    border-radius: 2px !important;
+    font-size: 0.85rem !important;
+}
+
+/* Divider line */
+.divider {
+    border: none;
+    border-top: 1px solid #222;
+    margin: 1.5rem 0;
+}
+
+/* Thumbnail */
+.thumb-container {
+    border: 1px solid #222;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+/* Video info card */
+.info-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-left: 3px solid #ff3c3c;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1rem;
+    border-radius: 0 2px 2px 0;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: #ccc;
+}
+.info-card strong {
+    color: #f0f0f0;
+}
+</style>
 """, unsafe_allow_html=True)
 
-st.divider()
+# ── Header ────────────────────────────────────────────────────────────────────
+st.markdown("<h1>YT DOWNLOADER</h1>", unsafe_allow_html=True)
+st.markdown('<p class="subtitle">vídeo · áudio · até 720p</p>', unsafe_allow_html=True)
+st.markdown('<hr class="divider">', unsafe_allow_html=True)
 
-# Feature cards
-col1, col2 = st.columns(2, gap="large")
+# ── Session state ─────────────────────────────────────────────────────────────
+if "file_bytes" not in st.session_state:
+    st.session_state.file_bytes = None
+if "file_name" not in st.session_state:
+    st.session_state.file_name = None
+if "video_info" not in st.session_state:
+    st.session_state.video_info = None
 
+# ── Input ─────────────────────────────────────────────────────────────────────
+url = st.text_input("URL do vídeo", placeholder="https://www.youtube.com/watch?v=...")
+
+col1, col2 = st.columns([3, 1])
 with col1:
-    st.markdown("""
-        <div style="border: 2px solid #FF6B6B; border-radius: 10px; padding: 2rem; text-align: center; height: 300px; display: flex; flex-direction: column; justify-content: center;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">▶️</div>
-            <h3 style="color: #FF6B6B; margin-bottom: 1rem;">Single Video Downloader</h3>
-            <p style="color: #666; margin-bottom: 1.5rem;">
-                Download a single YouTube video. Includes video preview, quality selection, and advanced download features.
-            </p>
-            <div style="background: #FF6B6B; color: white; padding: 0.5rem 1rem; border-radius: 5px; display: inline-block;">
-                Go to the "▶️ Youtube Downloader" page from the left menu
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
+    fetch_btn = st.button("🔍 Buscar informações", use_container_width=True)
 with col2:
-    st.markdown("""
-        <div style="border: 2px solid #4ECDC4; border-radius: 10px; padding: 2rem; text-align: center; height: 300px; display: flex; flex-direction: column; justify-content: center;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">🎶</div>
-            <h3 style="color: #4ECDC4; margin-bottom: 1rem;">Batch Video Downloader</h3>
-            <p style="color: #666; margin-bottom: 1.5rem;">
-                Process multiple video URLs at once. Includes batch downloading and progress tracking.
-            </p>
-            <div style="background: #4ECDC4; color: white; padding: 0.5rem 1rem; border-radius: 5px; display: inline-block;">
-                Go to the "🎶 Playlist Downloader" page from the left menu
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    pass
 
-st.divider()
+# ── Fetch info ────────────────────────────────────────────────────────────────
+if fetch_btn:
+    if not url.strip():
+        st.warning("Por favor, insira uma URL.")
+    else:
+        with st.spinner("Buscando informações do vídeo..."):
+            try:
+                ydl_opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    st.session_state.video_info = {
+                        "title": info.get("title", "N/A"),
+                        "channel": info.get("uploader", "N/A"),
+                        "duration": info.get("duration_string", "N/A"),
+                        "thumbnail": info.get("thumbnail", ""),
+                        "url": url,
+                    }
+                    st.session_state.file_bytes = None
+                    st.session_state.file_name = None
+            except Exception as e:
+                st.error(f"Erro ao buscar informações: {e}")
 
-# Feature list
-st.markdown("### ✨ Application Features")
+# ── Show info ─────────────────────────────────────────────────────────────────
+if st.session_state.video_info:
+    info = st.session_state.video_info
 
-col1, col2 = st.columns(2)
+    if info["thumbnail"]:
+        st.markdown('<div class="thumb-container">', unsafe_allow_html=True)
+        st.image(info["thumbnail"], use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-with col1:
-    st.markdown("""
-    **📹 Video Downloading:**
-    - Download videos in MP4 format
-    - Quality options (720p, 480p, 360p)
-    - Video preview and details
-    - Download progress indicator
-    
-    **🎵 Audio Downloading:**
-    - Extract audio in MP3 format
-    - High-quality audio (192 kbps)
-    - FFmpeg integration
-    """)
-
-with col2:
-    st.markdown("""
-    **🔧 Advanced Features:**
-    - Reliable downloading powered by yt-dlp
-    - Error handling and reporting
-    - Safe filename generation
-    - Batch download support
-    
-    **📁 File Management:**
-    - Automatic Downloads folder
-    - File size display
-    - List of downloaded files
-    """)
-
-st.divider()
-
-# Usage instructions
-with st.expander("📖 How to Use?"):
-    st.markdown("""
-    ### Step-by-Step Guide:
-    
-    1. **Select a page from the left menu:**
-       - **▶️ Youtube Downloader:** To download a single video
-       - **🎶 Playlist Downloader:** To download multiple videos
-    
-    2. **Choose format and quality:**
-       - Select MP4 for video or MP3 for audio
-       - Choose your desired video quality
-    
-    3. **Enter URLs:**
-       - Paste YouTube video links
-       - For batch downloading, enter one URL per line
-    
-    4. **Start the download process:**
-       - Click the "Download" button
-       - Wait for the process to complete
-    
-    ### 💡 Tips:
-    - FFmpeg is required for MP3 downloading
-    - Large files may take longer
-    - Ensure your internet connection is stable
-    """)
-
-# Footer
-st.markdown("""
-    <div style="text-align: center; padding: 2rem 0; color: #666; border-top: 1px solid #eee; margin-top: 2rem;">
-        <p>🚀 Powered by <strong>yt-dlp</strong> | 
-        📁 Files are saved in the <code>Downloads</code> folder</p>
+    st.markdown(f"""
+    <div class="info-card">
+        <strong>Título:</strong> {info['title']}<br>
+        <strong>Canal:</strong> {info['channel']}<br>
+        <strong>Duração:</strong> {info['duration']}
     </div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
+    dl_btn = st.button("⬇ Baixar vídeo (até 720p)", use_container_width=True)
+
+    if dl_btn:
+        progress_bar = st.progress(0, text="Iniciando download…")
+        status_text = st.empty()
+
+        def progress_hook(d):
+            if d["status"] == "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                downloaded = d.get("downloaded_bytes", 0)
+                if total:
+                    pct = int(downloaded / total * 90)
+                    speed = d.get("_speed_str", "")
+                    eta = d.get("_eta_str", "")
+                    progress_bar.progress(pct, text=f"Baixando… {pct}%  |  {speed}  |  ETA {eta}")
+            elif d["status"] == "finished":
+                progress_bar.progress(95, text="Processando arquivo…")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ydl_opts = {
+                "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best",
+                "outtmpl": os.path.join(tmpdir, "%(title)s.%(ext)s"),
+                "merge_output_format": "mp4",
+                "progress_hooks": [progress_hook],
+                "quiet": True,
+                "no_warnings": True,
+            }
+
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([info["url"]])
+
+                files = glob.glob(os.path.join(tmpdir, "*"))
+                if not files:
+                    raise FileNotFoundError("Nenhum arquivo foi gerado.")
+
+                out_file = files[0]
+                with open(out_file, "rb") as f:
+                    st.session_state.file_bytes = f.read()
+                st.session_state.file_name = os.path.basename(out_file)
+
+                progress_bar.progress(100, text="Concluído!")
+                status_text.success("✅ Download concluído! Clique no botão abaixo para salvar.")
+
+            except Exception as e:
+                progress_bar.empty()
+                status_text.empty()
+                st.error(f"Erro durante o download: {e}")
+
+# ── Download button ───────────────────────────────────────────────────────────
+if st.session_state.file_bytes and st.session_state.file_name:
+    st.markdown('<hr class="divider">', unsafe_allow_html=True)
+    st.download_button(
+        label=f"💾 Salvar  —  {st.session_state.file_name}",
+        data=st.session_state.file_bytes,
+        file_name=st.session_state.file_name,
+        mime="video/mp4",
+        use_container_width=True,
+    )
+
+# ── Footer ────────────────────────────────────────────────────────────────────
+st.markdown('<hr class="divider">', unsafe_allow_html=True)
+st.markdown(
+    '<p style="color:#444; font-size:0.72rem; text-align:center; letter-spacing:1px;">'
+    'POWERED BY YT-DLP · USO PESSOAL APENAS</p>',
+    unsafe_allow_html=True,
+)
